@@ -1,0 +1,135 @@
+{
+  "get_total_parcels_count": {
+    "description": "Calculates the total number of parcels in the MongoDB Database.",
+    "sample_code": [
+      { "$match": { "entrance_state": "2" } },
+      { "$count": "total_docs" }
+    ],
+    "notes": ""
+  },
+
+  "get_volume_scanner_barcode_read_rate": {
+    "description": "Generates a performance report for the volume scanner, including counts of various volume states.",
+    "sample_code": [
+      { "$match": { "identification_location": "1001.0041.0091" } },
+      { "$group": { "_id": "$volume_data.volume_state", "count": { "$sum": 1 } } },
+      { "$project": { "_id": 0, "volume_state": "$_id", "count": 1 } },
+      { "$group": {
+          "_id": null,
+          "Good read Count": { "$sum": { "$cond": [ { "$eq": ["$volume_state", 6] }, "$count", 0 ] } },
+          "No read Count": { "$sum": { "$cond": [ { "$eq": ["$volume_state", 7] }, "$count", 0 ] } },
+          "No data Count": { "$sum": { "$cond": [ { "$eq": ["$volume_state", 4] }, "$count", 0 ] } },
+          "Not used Count": { "$sum": { "$cond": [ { "$eq": ["$volume_state", 1] }, "$count", 0 ] } },
+          "Data too short Count": { "$sum": { "$cond": [ { "$eq": ["$volume_state", 2] }, "$count", 0 ] } },
+          "Data too long Count": { "$sum": { "$cond": [ { "$eq": ["$volume_state", 3] }, "$count", 0 ] } }
+      }},
+      { "$project": {
+          "_id": 0,
+          "Scanner_Name": { "$literal": "1001.0041.0091" },
+          "Good read Count": 1,
+          "No read Count": 1,
+          "No data Count": 1,
+          "Not used Count": 1,
+          "Data too short Count": 1,
+          "Data too long Count": 1
+      }}
+    ],
+    "notes": "If the user does not specify scanner name or it is not a valid scanner name, do not apply the identification_location filter."
+  },
+
+  "get_total_sorted_parcels_count": {
+    "description": "Calculates the total number of parcels sorted in the MongoDB Database.",
+    "sample_code": [
+      { "$match": { "sort_code": 1 } },
+      { "$count": "total_docs" }
+    ],
+    "notes": ""
+  },
+  "get_sort_report":{
+    "sample_code":[ [
+        {
+            "$facet": {
+                "sortion_report": [
+                    {
+                        "$group": {
+                            "_id": 0,
+                            "total_parcels": {"$sum": {"$cond": [{"$eq": ["$entrance_state", "2"]}, 1, 0]}},
+                            "sorted_parcels": {"$sum": {"$cond": [{"$eq": ["$sort_code", 1]}, 1, 0]}},
+                            "overflow_parcels": {"$sum": {"$cond": [{"$eq": ["$status", "closed"]}, 1, 0]}}
+                        }
+                    }
+                ],
+                "sorted_distribution": [
+                    {
+                        "$group": {
+                            "_id": "$sort_code",
+                            "count": {"$sum": 1}
+                        }
+                    },
+                    {
+                        "$project": {
+                            "_id": 0,
+                            "k": {
+                                "$switch": {
+                                    "branches": [
+                                        {"case": {"$eq": ["$_id", 1]}, "then": "good_sort"},
+                                        {"case": {"$eq": ["$_id", 2]}, "then": "destination_not_reached"},
+                                        {"case": {"$eq": ["$_id", 3]}, "then": "destination_invalid"},
+                                        {"case": {"$eq": ["$_id", 4]}, "then": "destination_full"},
+                                        {"case": {"$eq": ["$_id", 5]}, "then": "operation_unavailable"},
+                                        {"case": {"$eq": ["$_id", 10]}, "then": "not_at_speed"},
+                                        {"case": {"$eq": ["$_id", 12]}, "then": "higher_priority"},
+                                        {"case": {"$eq": ["$_id", 14]}, "then": "invalid_size"},
+                                        {"case": {"$eq": ["$_id", 16]}, "then": "no_sort_initiated"},
+                                        {"case": {"$eq": ["$_id", 17]}, "then": "throughput_limit"},
+                                        {"case": {"$eq": ["$_id", 26]}, "then": "technically_unavailable"},
+                                        {"case": {"$eq": ["$_id", 27]}, "then": "fail_to_divert"}
+                                    ],
+                                    "default": "No_sort_code"
+                                }
+                            },
+                            "v": "$count"
+                        }
+                    },
+                   
+                    {"$group": {"_id": 0, "kv": {"$push": {"k": "$k", "v": "$v"}}}},
+                    {"$replaceRoot": {"newRoot": {"$arrayToObject": "$kv"}}}
+                ]
+            }
+        }
+    ]
+]
+  },
+
+   "get_raw_logs_based_on_field": {
+    "description": "Fetches raw log entries from the MongoDB Database based on specified filters. Fields can be `hostId` or `barcode` inside `barcode_data.barcodes` array in the document.",
+    "sample_code": [
+      {
+        "$match": {
+          "hostId": "2828854"  
+          
+          
+        }
+      },
+      {
+        "$unwind": "$events"  
+      },
+      {
+        "$project": {
+          "_id": 0,
+          "raw_log": "$events.raw"  
+        }
+      }
+    ]
+  },
+
+  "get_message_count_all_messages":[
+        {"$unwind": "$events"},
+        {"$group": {"_id": "$events.type", "count": {"$sum": 1}}},
+        {"$group": {
+            "_id": 0,
+            "counts": {"$push": {"k": "$_id", "v": "$count"}}
+        }},
+        {"$replaceRoot": {"newRoot": {"$arrayToObject": "$counts"}}}
+    ]
+}
